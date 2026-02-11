@@ -42,9 +42,39 @@ def _count_commits(git_dir: str) -> Optional[int]:
 
 def get_git_log(git_dir: str) -> Optional[str]:
     """在指定 Git 目录中执行 git log 命令并返回输出文本，同时显示进度条。"""
+    import time
+    import hashlib
+    from pathlib import Path
+
     if not os.path.exists(git_dir):
         logger.error(f"❌ 错误：目录 '{git_dir}' 不存在。")
         return None
+
+    # Determine cache file path
+    git_path = Path(git_dir).resolve()
+    if git_path.name == ".git":
+        git_path = git_path.parent
+
+    # Save cache to ./cache directory relative to this script
+    cache_dir = Path(__file__).parent / ".cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    # Use hash of the absolute path to generate unique cache filename
+    repo_hash = hashlib.md5(str(git_path).encode("utf-8")).hexdigest()[:12]
+    cache_path = cache_dir / f".git_log_{repo_hash}.cache"
+
+    # Check cache validity (1 day = 86400 seconds)
+    if cache_path.exists():
+        try:
+            mtime = cache_path.stat().st_mtime
+            if time.time() - mtime < 86400:
+                logger.info("✅ 发现有效的 Git 日志缓存，直接读取...")
+                with open(cache_path, "r", encoding="utf-8") as f:
+                    return f.read()
+            else:
+                logger.info("ℹ️ Git 日志缓存已过期，正在重新读取...")
+        except Exception as e:
+            logger.warning(f"⚠️ 读取缓存失败: {e}")
 
     # 先获取总提交数，用于进度条
     total_commits = _count_commits(git_dir)
@@ -89,7 +119,17 @@ def get_git_log(git_dir: str) -> Optional[str]:
         logger.error("   请确认这是一个有效的 Git 仓库。")
         return None
 
-    return "".join(lines)
+    result = "".join(lines)
+    
+    # Save to cache
+    try:
+        with open(cache_path, "w", encoding="utf-8") as f:
+            f.write(result)
+        logger.info(f"✅ Git 日志已缓存至: {cache_path}")
+    except Exception as e:
+        logger.warning(f"⚠️ 写入缓存失败: {e}")
+
+    return result
 
 
 # numstat 行的正则: <insertions>\t<deletions>\t<filepath>
