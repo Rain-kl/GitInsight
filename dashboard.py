@@ -30,6 +30,7 @@ from charts import (
     build_file_heatmap_sunburst,
     build_code_stability_chart,
     build_developer_detail_charts,
+    build_lifecycle_gantt,
 )
 
 
@@ -40,6 +41,7 @@ def _chart_to_html_fragment(chart) -> str:
         return chart.render_notebook().data
     except Exception:
         pass
+    
     # 回退: 渲染到临时文件再读取 body
     import tempfile
     tmp = tempfile.mktemp(suffix=".html")
@@ -160,7 +162,8 @@ def build_dashboard_html(
         ("calendar", build_calendar_heatmap, (daily_commits,)),
         ("trend", build_personnel_trend_chart, (monthly_trends,)),
         ("sunburst", build_activity_sunburst, (author_stats,)),
-    ("scatter", build_lifecycle_scatter, (author_halfyear_trends, author_halfyear_ranges)),
+        ("gantt", build_lifecycle_gantt, (author_stats,)),
+        ("scatter", build_lifecycle_scatter, (author_halfyear_trends, author_halfyear_ranges)),
         ("commit_rank", build_commit_rank_bar, (author_stats,)),
         ("night_rank", build_night_commit_rank, (author_stats,)),
         ("maint_rank", build_maintenance_rank, (author_stats,)),
@@ -453,6 +456,10 @@ def build_dashboard_html(
     <div class="chart-panel">
       {chart_fragments.get("sunburst", "")}
     </div>
+  </div>
+
+  <div class="chart-panel full-width" style="margin-top:20px;">
+    {chart_fragments.get("gantt", "")}
   </div>
 
   <div class="chart-panel" style="margin-top:20px;">

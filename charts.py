@@ -17,6 +17,7 @@ charts.py — pyecharts 图表构建器。
 from __future__ import annotations
 
 import datetime
+import json
 from typing import Any, Dict, List
 
 import pandas as pd
@@ -689,3 +690,160 @@ def build_developer_detail_charts(
         "hour_table_html": hour_table_html,
         # "calendar" removed
     }
+
+
+# ---------------------------------------------------------------------------
+# 12. Lifecycle Gantt (Stacked Bar)
+# ---------------------------------------------------------------------------
+
+def build_lifecycle_gantt(author_stats: pd.DataFrame) -> Bar:
+    """开发者生命周期甘特图 (按首次提交时间排序)。"""
+    if author_stats.empty:
+        return Bar(init_opts=opts.InitOpts(width="100%", height="500px"))
+
+    df = author_stats.dropna(subset=["first_commit", "last_commit"]).copy()
+    if df.empty:
+        return Bar(init_opts=opts.InitOpts(width="100%", height="500px"))
+
+    # 倒序：让最早开始的人排在最上面 (reversal_axis 后 index 0 在底部)
+    df = df.sort_values("first_commit", ascending=False).copy()
+
+    names = [str(n) for n in df.index]
+
+    start_times: list[float] = []
+    durations: list[float] = []
+    end_times: list[float] = []
+
+    one_day_ms = 24 * 3600 * 1000
+
+    for _, row in df.iterrows():
+        start = row["first_commit"]
+        end = row["last_commit"]
+
+        start_ts = start.timestamp() * 1000
+        end_ts = end.timestamp() * 1000
+
+        duration = max(end_ts - start_ts, one_day_ms)
+
+        start_times.append(start_ts)
+        durations.append(duration)
+        end_times.append(start_ts + duration)
+
+    start_js = json.dumps(start_times)
+    end_js = json.dumps(end_times)
+
+    min_ts = min(start_times)
+    max_ts = max(end_times)
+    pad_ms = one_day_ms * 7
+
+    height = max(520, min(900, 28 * len(names) + 120))
+
+    bar = Bar(init_opts=opts.InitOpts(width="100%", height=f"{height}px"))
+    bar.add_xaxis(names)
+    
+    # 辅助透明系列：将条形“推”到起始位置
+    bar.add_yaxis(
+        "开始时间",
+        start_times,
+        stack="gantt",
+        itemstyle_opts=opts.ItemStyleOpts(color="rgba(0,0,0,0)"),
+        label_opts=opts.LabelOpts(is_show=False),
+        tooltip_opts=opts.TooltipOpts(is_show=False),
+    )
+    
+    # 实际显示系列：持续时间
+    bar.add_yaxis(
+        "活跃周期",
+        durations,
+        stack="gantt",
+        itemstyle_opts=opts.ItemStyleOpts(color="#73c0de"),
+        label_opts=opts.LabelOpts(
+            position="right",
+            formatter=JsCode(
+                "function(p){var days=Math.max(1, Math.round(p.value/86400000));return days+' 天';}"
+            ),
+        ),
+    )
+    
+    bar.reversal_axis()
+    
+    bar.set_global_opts(
+        title_opts=opts.TitleOpts(title="开发者生命周期甘特图", pos_left="center"),
+        tooltip_opts=opts.TooltipOpts(
+            trigger="item",
+            formatter=JsCode(
+                """
+                function(params) {
+                    if (params.seriesName.indexOf('开始时间') > -1) return '';
+                    var idx = params.dataIndex;
+                    var starts = """ + start_js + """;
+                    var ends = """ + end_js + """;
+                    var start = new Date(starts[idx]);
+                    var end = new Date(ends[idx]);
+                    var days = Math.max(1, Math.round((ends[idx] - starts[idx]) / (24 * 3600 * 1000)));
+                    function fmt(d) {
+                      var m = (d.getMonth() + 1).toString().padStart(2, '0');
+                      var day = d.getDate().toString().padStart(2, '0');
+                      return d.getFullYear() + '-' + m + '-' + day;
+                    }
+                    return '<b>' + params.name + '</b><br/>' +
+                           '开始: ' + fmt(start) + '<br/>' +
+                           '结束: ' + fmt(end) + '<br/>' +
+                           '活跃天数: ' + days + ' 天';
+                }
+                """
+            )
+        ),
+        xaxis_opts=opts.AxisOpts(
+            type_="value",
+            name="时间",
+            position="top",
+            min_=min_ts - pad_ms,
+            max_=max_ts + pad_ms,
+            axislabel_opts=opts.LabelOpts(
+                formatter=JsCode(
+                    """
+                    function (value) {
+                        var d = new Date(value);
+                        var m = (d.getMonth() + 1).toString().padStart(2, '0');
+                        return d.getFullYear() + '-' + m;
+                    }
+                    """
+                )
+            ),
+            splitline_opts=opts.SplitLineOpts(is_show=True),
+        ),
+        yaxis_opts=opts.AxisOpts(
+            axislabel_opts=opts.LabelOpts(interval=0)
+        ),
+        legend_opts=opts.LegendOpts(is_show=False),
+        datazoom_opts=[
+            opts.DataZoomOpts(
+                type_="slider",
+                orient="horizontal",
+                is_show=True,
+                pos_bottom="10",
+                filter_mode="weakFilter" 
+            ),
+             opts.DataZoomOpts(
+                type_="inside",
+                orient="horizontal",
+                filter_mode="weakFilter"
+            ),
+             # Vertical zoom for scrolling through many authors
+            opts.DataZoomOpts(
+                type_="slider",
+                orient="vertical",
+                is_show=True,
+                pos_right="10",
+                filter_mode="empty"
+            ),
+             opts.DataZoomOpts(
+                type_="inside",
+                orient="vertical",
+                filter_mode="empty"
+            )
+        ]
+    )
+    
+    return bar
