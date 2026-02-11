@@ -298,6 +298,7 @@ def build_lifecycle_scatter(author_stats: pd.DataFrame) -> Scatter:
                 "提交: '+p.value[2];}"
             )
         ),
+        legend_opts=opts.LegendOpts(pos_bottom="0"),
     )
     return scatter
 
