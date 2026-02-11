@@ -337,6 +337,7 @@ def build_commit_rank_bar(author_stats: pd.DataFrame) -> Bar:
         yaxis_opts=opts.AxisOpts(
             axislabel_opts=opts.LabelOpts(font_size=11),
         ),
+        legend_opts=opts.LegendOpts(pos_bottom="0"),
     )
     return bar
 
@@ -407,6 +408,7 @@ def build_night_commit_rank(author_stats: pd.DataFrame) -> Bar:
             ),
         ),
         xaxis_opts=opts.AxisOpts(name="夜间提交次数"),
+        legend_opts=opts.LegendOpts(pos_bottom="0"),
     )
     return bar
 
@@ -468,6 +470,7 @@ def build_maintenance_rank(author_stats: pd.DataFrame) -> Bar:
             trigger="axis", axis_pointer_type="shadow",
         ),
         xaxis_opts=opts.AxisOpts(name="维护天数"),
+        legend_opts=opts.LegendOpts(pos_bottom="0"),
     )
     return bar
 
