@@ -56,81 +56,47 @@ def _to_float_list(values, decimals: int = 1) -> List[float]:
 # ---------------------------------------------------------------------------
 
 def build_calendar_heatmap(daily_commits: pd.Series) -> Calendar:
-    """提交热力图，多年时垂直堆叠显示各年日历。"""
+    """提交热力图，只显示最近一年（从最后一次提交向前推一年）。"""
     if daily_commits.empty:
         cal = Calendar(init_opts=opts.InitOpts(width="100%", height="220px"))
         cal.set_global_opts(title_opts=opts.TitleOpts(title="提交活动日历热力图"))
         return cal
 
-    # 分年份数据
-    all_dates = pd.Series(daily_commits.index)
-    years = sorted(set(d.year for d in all_dates), reverse=True)
+    # 确定时间范围：最后一次提交日期 ~ 向前推一年
+    max_date = daily_commits.index.max()
+    min_date = max_date - datetime.timedelta(days=365)
+    
+    # 转换为字符串, ECharts range 支持 ['YYYY-MM-DD', 'YYYY-MM-DD']
+    range_date = [str(min_date), str(max_date)]
+
+    # 筛选数据
+    data = [
+        [str(d), int(c)] 
+        for d, c in daily_commits.items() 
+        if d >= min_date
+    ]
+    
     max_val = int(daily_commits.max())
 
-    if len(years) <= 1:
-        # 单年直接返回 Calendar
-        year = years[0]
-        data = [[str(d), int(c)] for d, c in daily_commits.items()]
-        cal = Calendar(init_opts=opts.InitOpts(width="100%", height="220px"))
-        cal.add(
-            series_name="提交数",
-            yaxis_data=data,
-            calendar_opts=opts.CalendarOpts(
-                pos_top="40",
-                pos_left="60",
-                pos_right="30",
-                range_=str(year),
-                daylabel_opts=opts.CalendarDayLabelOpts(name_map="cn"),
-                monthlabel_opts=opts.CalendarMonthLabelOpts(name_map="cn"),
-            ),
-        )
-        cal.set_global_opts(
-            title_opts=opts.TitleOpts(title="提交活动日历热力图", pos_left="center"),
-            visualmap_opts=opts.VisualMapOpts(
-                max_=max_val, min_=0, orient="horizontal",
-                pos_top="180", pos_left="center",
-                range_color=["#ebedf0", "#9be9a8", "#40c463", "#30a14e", "#216e39"],
-            ),
-            legend_opts=opts.LegendOpts(is_show=False),
-        )
-        return cal
-
-    # 多年: 垂直堆叠多个日历（每年一行，约 160px 高度）
-    # pyecharts Timeline + Calendar 存在坐标系配置丢失的 bug，
-    # 改用单个 Calendar 图表，通过 calendar_index 为每年创建独立的日历坐标系。
-    num_years = len(years)
-    row_height = 160
-    title_height = 40
-    vm_height = 50
-    chart_height = title_height + num_years * row_height + vm_height
-    cal = Calendar(init_opts=opts.InitOpts(width="100%", height=f"{chart_height}px"))
-
-    for idx, year in enumerate(years):
-        year_data = {
-            d: c for d, c in daily_commits.items() if d.year == year
-        }
-        if not year_data:
-            continue
-        data = [[str(d), int(c)] for d, c in year_data.items()]
-        top_px = title_height + idx * row_height
-        cal.add(
-            series_name="",
-            yaxis_data=data,
-            calendar_opts=opts.CalendarOpts(
-                pos_top=f"{top_px}px",
-                pos_left="60",
-                pos_right="30",
-                range_=str(year),
-                daylabel_opts=opts.CalendarDayLabelOpts(name_map="cn"),
-                monthlabel_opts=opts.CalendarMonthLabelOpts(name_map="cn"),
-            ),
-        )
-
+    cal = Calendar(init_opts=opts.InitOpts(width="100%", height="240px"))
+    cal.add(
+        series_name="提交数",
+        yaxis_data=data,
+        calendar_opts=opts.CalendarOpts(
+            pos_top="50",
+            pos_left="30",
+            pos_right="30",
+            range_=range_date,
+            daylabel_opts=opts.CalendarDayLabelOpts(name_map="cn"),
+            monthlabel_opts=opts.CalendarMonthLabelOpts(name_map="cn"),
+            yearlabel_opts=opts.CalendarYearLabelOpts(is_show=False),
+        ),
+    )
     cal.set_global_opts(
-        title_opts=opts.TitleOpts(title="提交活动日历热力图", pos_left="center"),
+        title_opts=opts.TitleOpts(title="提交活动日历热力图 (近一年)", pos_left="center"),
         visualmap_opts=opts.VisualMapOpts(
             max_=max_val, min_=0, orient="horizontal",
-            pos_bottom="0", pos_left="center",
+            pos_bottom="10", pos_left="center",
             range_color=["#ebedf0", "#9be9a8", "#40c463", "#30a14e", "#216e39"],
         ),
         legend_opts=opts.LegendOpts(is_show=False),
