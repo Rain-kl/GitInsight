@@ -5,6 +5,7 @@ git_reader.py — 从 Git 仓库提取完整提交记录与文件变更统计。
   - commits_df: 每行一条提交 (hash, author, email, datetime_str, message, insertions, deletions)
   - file_stats_df: 每行一个文件变更 (hash, filepath, insertions, deletions)
 """
+
 from __future__ import annotations
 
 import os
@@ -55,8 +56,8 @@ def get_git_log(git_dir: str) -> Optional[str]:
     if git_path.name == ".git":
         git_path = git_path.parent
 
-    # Save cache to ./cache directory relative to this script
-    cache_dir = Path(__file__).parent / ".cache"
+    # Save cache to ~/.cache/gitinsight directory
+    cache_dir = Path.home() / ".cache" / "gitinsight"
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     # Use hash of the absolute path to generate unique cache filename
@@ -104,8 +105,10 @@ def get_git_log(git_dir: str) -> Optional[str]:
 
     # 逐行读取，遇到 COMMIT_SEP 时更新进度
     lines: list[str] = []
-    with tqdm(total=total_commits, desc="正在读取 Git 日志", unit="commit", leave=False) as pbar:
-        for line in proc.stdout:                 # type: ignore[union-attr]
+    with tqdm(
+        total=total_commits, desc="正在读取 Git 日志", unit="commit", leave=False
+    ) as pbar:
+        for line in proc.stdout:  # type: ignore[union-attr]
             lines.append(line)
             if _COMMIT_SEP in line:
                 pbar.update(1)
@@ -120,7 +123,7 @@ def get_git_log(git_dir: str) -> Optional[str]:
         return None
 
     result = "".join(lines)
-    
+
     # Save to cache
     try:
         with open(cache_path, "w", encoding="utf-8") as f:
@@ -204,7 +207,15 @@ def parse_git_log(stdout: str) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     commits_df = pd.DataFrame(
         commits,
-        columns=["hash", "author", "email", "datetime_str", "message", "insertions", "deletions"],
+        columns=[
+            "hash",
+            "author",
+            "email",
+            "datetime_str",
+            "message",
+            "insertions",
+            "deletions",
+        ],
     )
     file_stats_df = pd.DataFrame(
         file_stats,

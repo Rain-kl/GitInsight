@@ -1,6 +1,7 @@
 """
 main.py — Git 项目人员分析可视化系统入口。
 """
+
 import io
 import sys
 from pathlib import Path
@@ -14,12 +15,15 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="repla
 
 # Configure loguru
 logger.remove()
-logger.add(sys.stderr, format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>")
+logger.add(
+    sys.stderr,
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
+)
 
-from analysis import compute_insights, filter_automated_commits, prepare_dataframe
-from dashboard import build_dashboard_html
-from git_reader import get_git_log, parse_git_log
-from report import print_summary
+from .analysis import compute_insights, filter_automated_commits, prepare_dataframe
+from .dashboard import build_dashboard_html
+from .git_reader import get_git_log, parse_git_log
+from .report import print_summary
 
 
 def resolve_git_dir() -> str | None:

@@ -8,6 +8,7 @@ dashboard.py — 将所有图表组装为完整的 HTML 仪表板。
   - 开发者点击事件 -> 个人面板 (弹窗)
   - 时间维度选择器 (JS 联动)
 """
+
 from __future__ import annotations
 
 import json
@@ -18,7 +19,7 @@ from typing import Any, Dict
 import pandas as pd
 from pyecharts.render import engine as pyecharts_engine
 
-from charts import (
+from .charts import (
     build_calendar_heatmap,
     build_personnel_trend_chart,
     build_activity_sunburst,
@@ -41,9 +42,10 @@ def _chart_to_html_fragment(chart) -> str:
         return chart.render_notebook().data
     except Exception:
         pass
-    
+
     # 回退: 渲染到临时文件再读取 body
     import tempfile
+
     tmp = tempfile.mktemp(suffix=".html")
     try:
         chart.render(tmp)
@@ -65,6 +67,7 @@ def _chart_to_html_fragment(chart) -> str:
 def _render_chart_div(chart, div_id: str) -> str:
     """将 pyecharts 图表渲染为独立的 div + script 片段。"""
     import tempfile
+
     tmp = tempfile.mktemp(suffix=".html")
     try:
         chart.render(tmp)
@@ -84,10 +87,12 @@ def _render_chart_div(chart, div_id: str) -> str:
 
     # 找所有 <div id="..."> 和 <script> 块
     divs = re.findall(r'(<div id="[^"]*"[^>]*></div>)', full_html)
-    scripts = re.findall(r'(<script>.*?</script>)', full_html, re.DOTALL)
+    scripts = re.findall(r"(<script>.*?</script>)", full_html, re.DOTALL)
 
     # 排除 echarts.min.js 的加载脚本
-    chart_scripts = [s for s in scripts if "echarts.min.js" not in s and "var chart_" in s]
+    chart_scripts = [
+        s for s in scripts if "echarts.min.js" not in s and "var chart_" in s
+    ]
 
     fragment = "\n".join(divs) + "\n" + "\n".join(chart_scripts)
     return fragment
@@ -127,7 +132,9 @@ def _build_developer_panels_js(
 
     dev_data = {}
     for author_name in author_stats.index:
-        detail = build_developer_detail_charts(prepared_df, str(author_name), author_stats)
+        detail = build_developer_detail_charts(
+            prepared_df, str(author_name), author_stats
+        )
         if not detail:
             continue
         info = detail.get("info", {})
@@ -163,7 +170,11 @@ def build_dashboard_html(
         ("trend", build_personnel_trend_chart, (monthly_trends,)),
         ("sunburst", build_activity_sunburst, (author_stats,)),
         ("gantt", build_lifecycle_gantt, (author_stats,)),
-        ("scatter", build_lifecycle_scatter, (author_halfyear_trends, author_halfyear_ranges)),
+        (
+            "scatter",
+            build_lifecycle_scatter,
+            (author_halfyear_trends, author_halfyear_ranges),
+        ),
         ("commit_rank", build_commit_rank_bar, (author_stats,)),
         ("night_rank", build_night_commit_rank, (author_stats,)),
         ("maint_rank", build_maintenance_rank, (author_stats,)),
@@ -179,7 +190,9 @@ def build_dashboard_html(
             fragment = _render_chart_div(chart_obj, chart_id)
             chart_fragments[chart_id] = fragment
         except Exception as e:
-            chart_fragments[chart_id] = f'<div class="chart-error">图表 {chart_id} 渲染失败: {e}</div>'
+            chart_fragments[chart_id] = (
+                f'<div class="chart-error">图表 {chart_id} 渲染失败: {e}</div>'
+            )
 
     # Developer detail table (pre-render top 20)
     dev_table_fragments: Dict[str, str] = {}
@@ -187,7 +200,9 @@ def build_dashboard_html(
         top_authors = list(author_stats.index[:20])
         for author_name in top_authors:
             try:
-                detail = build_developer_detail_charts(prepared_df, str(author_name), author_stats)
+                detail = build_developer_detail_charts(
+                    prepared_df, str(author_name), author_stats
+                )
                 if detail and detail.get("hour_table_html"):
                     dev_table_fragments[str(author_name)] = detail["hour_table_html"]
             except Exception:
@@ -201,10 +216,12 @@ def build_dashboard_html(
     def _escape_script_tags(s: str) -> str:
         return s.replace("</script>", "<\/script>")
 
-    dev_table_js_map = _escape_script_tags(json.dumps(
-        {k: v for k, v in dev_table_fragments.items()},
-        ensure_ascii=False,
-    ))
+    dev_table_js_map = _escape_script_tags(
+        json.dumps(
+            {k: v for k, v in dev_table_fragments.items()},
+            ensure_ascii=False,
+        )
+    )
 
     # ---- KPI ----
     kpi_html = _build_kpi_cards_html(metrics)
