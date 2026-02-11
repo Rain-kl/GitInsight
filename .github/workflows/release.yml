@@ -1,0 +1,70 @@
+name: Auto Release Wheel
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build and Release Wheel
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Generate Version Number
+        id: version
+        run: |
+          # Use current timestamp as version: YYYY.MM.DD.HHMMSS
+          # Using UTC time to avoid timezone confusion and ensure monotonicity
+          VERSION_NUM=$(date -u +'%Y.%m.%d.%H%M%S')
+          echo "VERSION_NUM=$VERSION_NUM" >> $GITHUB_ENV
+          echo "Generated version: $VERSION_NUM"
+
+      - name: Update pyproject.toml version
+        run: |
+          # Simple sed replacement for the version field
+          # Matches 'version = "..."'
+          sed -i "s/version = \".*\"/version = \"${{ env.VERSION_NUM }}\"/" pyproject.toml
+          echo "Updated pyproject.toml version:"
+          grep "version =" pyproject.toml
+
+      - name: Build Wheel
+        run: |
+          uv build
+          
+          # Verify the output
+          echo "Build artifacts:"
+          ls -l dist/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ env.VERSION_NUM }}"
+          name: "Release v${{ env.VERSION_NUM }}"
+          files: dist/*.whl
+          make_latest: true
+          body: |
+            Auto-generated release from GitHub Actions.
+            Version: ${{ env.VERSION_NUM }}
+            Build Time: $(date)
+            
+            ## Platform Support
+            This release contains a **Pure Python Wheel** (`*-py3-none-any.whl`).
+            It is compatible with:
+            - ✅ **Windows (x64/ARM64)**
+            - ✅ **Linux (x64/ARM64)**
+            - ✅ **macOS (x64/ARM64)**
+            
+            Requires Python 3.12+.
