@@ -83,20 +83,124 @@ def prepare_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def compute_monthly_trends(df: pd.DataFrame) -> pd.DataFrame:
+    """计算每月的人员变动趋势。"""
+    if df.empty:
+        return pd.DataFrame()
+
+    # 按月重采样
+    # 确保使用 date_6am_cutoff 来归组月份，保持统计口径一致
+    df = df.copy()
+    df["month_date"] = pd.to_datetime(df["date_6am_cutoff"]).dt.to_period("M").dt.to_timestamp()
+    
+    # 1. 每月活跃开发者（当月有提交）
+    monthly_active = df.groupby("month_date")["author"].nunique().rename("active_authors")
+
+    # 2. 新增开发者（当月首次提交）
+    author_first_commit = df.groupby("author")["month_date"].min()
+    new_authors = author_first_commit.value_counts().sort_index().rename("new_authors")
+
+    # 3. 累计开发者
+    #由于new_authors索引是月份，可能不连续，需要重新索引填充0
+    trend_df = pd.DataFrame(index=monthly_active.index)
+    trend_df = trend_df.join(new_authors).fillna(0)
+    trend_df["cumulative_authors"] = trend_df["new_authors"].cumsum()
+    trend_df = trend_df.join(monthly_active).fillna(0)
+
+    # 转换列为int
+    return trend_df.astype(int)
+
+
+def compute_author_stats(df: pd.DataFrame, ref_date: pd.Timestamp = None) -> pd.DataFrame:
+    """计算作者维度的详细统计信息。"""
+    if df.empty:
+        return pd.DataFrame()
+
+    if ref_date is None:
+        ref_date = pd.Timestamp.now(tz=TARGET_TZ)
+    
+    # 基础聚合
+    stats = df.groupby("author").agg(
+        total_commits=("datetime_str", "count"),
+        first_commit=("local_time", "min"),
+        last_commit=("local_time", "max"),
+        # 夜间提交: adjusted_time >= 20.0 (20:00 - 06:00 次日)
+        night_commits=("time_in_6am_day", lambda x: (x >= 20.0).sum())
+    )
+
+    # 计算衍生指标
+    stats["maintenance_days"] = (stats["last_commit"] - stats["first_commit"]).dt.days
+    
+    # 活跃判定 (近180天)
+    #以最后一次提交时间为参考（针对已停止维护的项目可能更合理），还是以当前时间？
+    #需求文档 3.1.2: 活跃开发者 = (当前日期 - 最后提交日期) <= 180天
+    #这里使用传入的 ref_date (通常是 now)
+    days_since_last = (ref_date - stats["last_commit"].dt.tz_localize(ref_date.tz)).dt.days
+    stats["is_active"] = days_since_last <= 180
+
+    # 参与阶段 (Based on last commit)
+    # 近期参与 (近3个月), 中期 (3-12个月), 历史 (>1年)
+    def get_phase(days):
+        if days <= 90: return "近期参与" 
+        elif days <= 365: return "中期参与"
+        else: return "历史参与"
+    stats["phase"] = days_since_last.apply(get_phase)
+
+    # 贡献程度 (按总提交数分位)
+    # 核心 (Top 20%), 常规 (Bot 20-80%), 偶尔 (Bot 20%)
+    # 简单的按 rank 划分
+    stats["rank_pct"] = stats["total_commits"].rank(pct=True)
+    def get_contribution_level(pct):
+        if pct > 0.8: return "核心贡献者"
+        elif pct > 0.2: return "常规贡献者"
+        else: return "偶尔贡献者"
+    stats["contribution_level"] = stats["rank_pct"].apply(get_contribution_level)
+
+    # 夜间提交占比
+    stats["night_ratio"] = stats["night_commits"] / stats["total_commits"]
+
+    return stats.sort_values("total_commits", ascending=False)
+
+
 def compute_insights(df: pd.DataFrame) -> Dict[str, object]:
     """汇总核心指标与统计。"""
     total_commits = len(df)
     total_authors = df["author"].nunique()
 
     reference_time = df["local_time"].max()
+    now_time = pd.Timestamp.now(tz=TARGET_TZ)
+    
     if pd.isna(reference_time):
-        reference_time = pd.Timestamp.now()
+        reference_time = now_time
 
     date_range = (
         f"{df['date_6am_cutoff'].min()} ~ {df['date_6am_cutoff'].max()}"
         if not df.empty
         else "无"
     )
+
+    # 计算高级统计
+    monthly_trends = compute_monthly_trends(df)
+    author_stats = compute_author_stats(df, ref_date=now_time)
+
+    # 简单的文本摘要统计
+    active_recent_2m = 0
+    inactive_1y = 0
+    if not author_stats.empty:
+        # 近2个月活跃 (约60天)
+        since_last = (now_time - author_stats["last_commit"].dt.tz_localize(now_time.tz)).dt.days
+        active_recent_2m = (since_last <= 60).sum()
+        inactive_1y = (since_last > 365).sum()
+
+    return {
+        "total_commits": total_commits,
+        "total_authors": total_authors,
+        "date_range": date_range,
+        "active_recent_2m": active_recent_2m,
+        "inactive_1y": inactive_1y,
+        "monthly_trends": monthly_trends,
+        "author_stats": author_stats,
+    }
 
     daily_commits = df.groupby("date_6am_cutoff").size().sort_index()
 
