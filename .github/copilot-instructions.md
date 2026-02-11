@@ -19,7 +19,7 @@
 
 ## 开发/运行流程
 - 依赖由 `pyproject.toml` 管理（Python >= 3.12，`pandas` + `pyecharts`）。
-- 运行入口：`python main.py /path/to/git/repo` 或直接运行后按提示输入路径（见 `README.md`）。
+- 运行入口：`uv run main.py /path/to/git/repo` 或直接运行后按提示输入路径（见 `README.md`）。
 
 ## 修改注意事项（保持统计一致）
 - 若调整时间段或分界逻辑，需同步修改：`PERIOD_ORDER`、`calculate_time_period_stats()`、`report.export_csv()` 的字段顺序与含义。

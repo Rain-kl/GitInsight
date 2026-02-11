@@ -48,21 +48,19 @@ def main() -> None:
         print("❌ 所有提交时间都无法解析。")
         return
 
-    metrics, period_stats, top_authors = compute_insights(df_prepared)
+    metrics = compute_insights(df_prepared)
 
     repo_name = Path(git_dir).resolve().name or "git_repo"
     output_csv = f"git_dev_insights_report_{repo_name}.csv"
     output_html = f"git_dev_insights_charts_{repo_name}.html"
 
-    export_csv(output_csv, metrics, period_stats, top_authors)
-    render_charts(metrics, period_stats, output_html)
+    export_csv(output_csv, metrics)
+    render_charts(metrics, output_html)
 
     print_summary(
         metrics,
         filter_stats,
         {"csv": output_csv, "html": output_html},
-        period_stats,
-        top_authors,
     )
 
 if __name__ == "__main__":

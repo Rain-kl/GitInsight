@@ -7,7 +7,6 @@ from typing import Dict
 import pandas as pd
 
 TARGET_TZ = "Asia/Shanghai"
-PERIOD_ORDER = ["18:00-19:00", "19:00-20:00", "20:00-次日06:00"]
 
 
 @dataclass(frozen=True)
@@ -43,23 +42,6 @@ def get_commit_date_with_6am_cutoff(timestamp: pd.Timestamp) -> pd.Timestamp:
     if timestamp.hour < 6:
         return (timestamp - timedelta(days=1)).date()
     return timestamp.date()
-
-
-def format_time_display(timestamp: pd.Timestamp) -> str:
-    """显示时间字符串，凌晨标记为次日凌晨。"""
-    date_str = timestamp.date()
-    if timestamp.hour < 6:
-        return f"{date_str} {timestamp.hour:02d}:{timestamp.minute:02d}（次日凌晨）"
-    return f"{date_str} {timestamp.hour:02d}:{timestamp.minute:02d}"
-
-
-def format_time_from_adjusted(adjusted_time: float) -> str:
-    hour_int = int(adjusted_time)
-    minute_int = int((adjusted_time - hour_int) * 60)
-    if hour_int >= 24:
-        hour_int -= 24
-        return f"{hour_int:02d}:{minute_int:02d}（次日凌晨）"
-    return f"{hour_int:02d}:{minute_int:02d}"
 
 
 def filter_automated_commits(df: pd.DataFrame) -> tuple[pd.DataFrame, FilterStats]:
@@ -101,92 +83,45 @@ def prepare_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def calculate_time_period_stats(df: pd.DataFrame) -> Dict[str, Dict[str, object]]:
-    """统计晚间时间段提交分布。"""
-    total_commits = len(df)
-    period_stats: Dict[str, Dict[str, object]] = {
-        label: {"count": 0, "percentage": 0.0, "author_counts": {}}
-        for label in PERIOD_ORDER
-    }
-
-    for _, row in df.iterrows():
-        hour = row["hour"]
-        author = row["author"]
-
-        if 18 <= hour < 19:
-            period = "18:00-19:00"
-        elif 19 <= hour < 20:
-            period = "19:00-20:00"
-        elif hour >= 20 or hour < 6:
-            period = "20:00-次日06:00"
-        else:
-            continue
-
-        stats = period_stats[period]
-        stats["count"] += 1
-        author_counts = stats["author_counts"]
-        author_counts[author] = author_counts.get(author, 0) + 1
-
-    for label, stats in period_stats.items():
-        stats["percentage"] = (stats["count"] / total_commits * 100) if total_commits else 0.0
-
-    return period_stats
-
-
-def get_period_top_authors(period_stats: Dict[str, Dict[str, object]]) -> Dict[str, Dict[str, object]]:
-    """获取各时间段提交最多的作者。"""
-    top_authors: Dict[str, Dict[str, object]] = {}
-    for period, stats in period_stats.items():
-        author_counts = stats["author_counts"]
-        if not author_counts:
-            top_authors[period] = {"author": "无", "count": 0}
-            continue
-        top_author = max(author_counts.items(), key=lambda item: item[1])
-        top_authors[period] = {"author": top_author[0], "count": top_author[1]}
-    return top_authors
-
-
-def compute_insights(df: pd.DataFrame) -> tuple[Dict[str, object], Dict[str, Dict[str, object]], Dict[str, Dict[str, object]]]:
+def compute_insights(df: pd.DataFrame) -> Dict[str, object]:
     """汇总核心指标与统计。"""
     total_commits = len(df)
     total_authors = df["author"].nunique()
 
-    latest_time_row = df.loc[df["adjusted_time"].idxmax()]
-    latest_time_display = format_time_display(latest_time_row["local_time"])
-    latest_author = latest_time_row["author"]
+    reference_time = df["local_time"].max()
+    if pd.isna(reference_time):
+        reference_time = pd.Timestamp.now()
 
-    daily_latest = df.groupby("date_6am_cutoff")["time_in_6am_day"].max()
-    median_latest_hour = daily_latest.median() if not daily_latest.empty else 0.0
-    median_time_str = format_time_from_adjusted(median_latest_hour)
+    date_range = (
+        f"{df['date_6am_cutoff'].min()} ~ {df['date_6am_cutoff'].max()}"
+        if not df.empty
+        else "无"
+    )
 
-    after_18_df = df[df["time_in_6am_day"] >= 18]
-    after_18_count = len(after_18_df)
-    after_18_pct = (after_18_count / total_commits * 100) if total_commits else 0.0
-
-    night_counts = after_18_df.groupby("author").size()
-    if not night_counts.empty:
-        most_night_author = night_counts.idxmax()
-        most_night_count = int(night_counts.max())
-    else:
-        most_night_author = "无"
-        most_night_count = 0
-
-    period_stats = calculate_time_period_stats(df)
-    top_authors = get_period_top_authors(period_stats)
+    daily_commits = df.groupby("date_6am_cutoff").size().sort_index()
 
     overall_author_counts = df["author"].value_counts().head(10)
+
+    night_df = df[df["time_in_6am_day"].between(20, 30, inclusive="left")]
+    night_author_counts = night_df["author"].value_counts().head(10)
+
+    recent_3m_df = df[df["local_time"] >= reference_time - pd.DateOffset(months=3)]
+    recent_3m_counts = recent_3m_df["author"].value_counts().head(10)
+
+    last_commit_by_author = df.groupby("author")["local_time"].max()
+    active_recent_2m = int((last_commit_by_author >= reference_time - pd.DateOffset(months=2)).sum())
+    inactive_1y = int((last_commit_by_author < reference_time - pd.DateOffset(years=1)).sum())
 
     metrics = {
         "total_commits": total_commits,
         "total_authors": total_authors,
-        "latest_time_display": latest_time_display,
-        "latest_author": latest_author,
-        "median_time_str": median_time_str,
-        "after_18_pct": after_18_pct,
-        "after_18_count": after_18_count,
-        "most_night_author": most_night_author,
-        "most_night_count": most_night_count,
+        "date_range": date_range,
+        "daily_commits": daily_commits,
         "overall_author_counts": overall_author_counts,
+        "night_author_counts": night_author_counts,
+        "recent_3m_author_counts": recent_3m_counts,
+        "active_recent_2m": active_recent_2m,
+        "inactive_1y": inactive_1y,
     }
 
-    return metrics, period_stats, top_authors
+    return metrics
