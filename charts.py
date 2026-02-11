@@ -31,7 +31,7 @@ from pyecharts.charts import (
     Scatter,
     Sunburst,
     Tab,
-    Timeline,
+    # Timeline is intentionally not used — see build_calendar_heatmap comment
     Grid,
 )
 from pyecharts.globals import ThemeType
@@ -55,8 +55,8 @@ def _to_float_list(values, decimals: int = 1) -> List[float]:
 # 1. Calendar Heatmap
 # ---------------------------------------------------------------------------
 
-def build_calendar_heatmap(daily_commits: pd.Series) -> Timeline | Calendar:
-    """提交热力图，支持按年切换。"""
+def build_calendar_heatmap(daily_commits: pd.Series) -> Calendar:
+    """提交热力图，多年时垂直堆叠显示各年日历。"""
     if daily_commits.empty:
         cal = Calendar(init_opts=opts.InitOpts(width="100%", height="220px"))
         cal.set_global_opts(title_opts=opts.TitleOpts(title="提交活动日历热力图"))
@@ -64,13 +64,13 @@ def build_calendar_heatmap(daily_commits: pd.Series) -> Timeline | Calendar:
 
     # 分年份数据
     all_dates = pd.Series(daily_commits.index)
-    years = sorted(set(d.year for d in all_dates))
+    years = sorted(set(d.year for d in all_dates), reverse=True)
+    max_val = int(daily_commits.max())
 
     if len(years) <= 1:
         # 单年直接返回 Calendar
         year = years[0]
         data = [[str(d), int(c)] for d, c in daily_commits.items()]
-        max_val = int(daily_commits.max())
         cal = Calendar(init_opts=opts.InitOpts(width="100%", height="220px"))
         cal.add(
             series_name="提交数",
@@ -95,31 +95,29 @@ def build_calendar_heatmap(daily_commits: pd.Series) -> Timeline | Calendar:
         )
         return cal
 
-    # 多年: 使用 Timeline
-    tl = Timeline(init_opts=opts.InitOpts(width="100%", height="280px"))
-    tl.add_schema(
-        play_interval=3000,
-        is_auto_play=False,
-        pos_bottom="0",
-        pos_left="center",
-        width="60%",
-    )
+    # 多年: 垂直堆叠多个日历（每年一行，约 160px 高度）
+    # pyecharts Timeline + Calendar 存在坐标系配置丢失的 bug，
+    # 改用单个 Calendar 图表，通过 calendar_index 为每年创建独立的日历坐标系。
+    num_years = len(years)
+    row_height = 160
+    title_height = 40
+    vm_height = 50
+    chart_height = title_height + num_years * row_height + vm_height
+    cal = Calendar(init_opts=opts.InitOpts(width="100%", height=f"{chart_height}px"))
 
-    max_val = int(daily_commits.max())
-
-    for year in reversed(years):
+    for idx, year in enumerate(years):
         year_data = {
             d: c for d, c in daily_commits.items() if d.year == year
         }
         if not year_data:
             continue
         data = [[str(d), int(c)] for d, c in year_data.items()]
-        cal = Calendar(init_opts=opts.InitOpts(width="100%", height="220px"))
+        top_px = title_height + idx * row_height
         cal.add(
-            series_name="提交数",
+            series_name="",
             yaxis_data=data,
             calendar_opts=opts.CalendarOpts(
-                pos_top="40",
+                pos_top=f"{top_px}px",
                 pos_left="60",
                 pos_right="30",
                 range_=str(year),
@@ -127,18 +125,17 @@ def build_calendar_heatmap(daily_commits: pd.Series) -> Timeline | Calendar:
                 monthlabel_opts=opts.CalendarMonthLabelOpts(name_map="cn"),
             ),
         )
-        cal.set_global_opts(
-            title_opts=opts.TitleOpts(title="提交活动日历热力图", pos_left="center"),
-            visualmap_opts=opts.VisualMapOpts(
-                max_=max_val, min_=0, orient="horizontal",
-                pos_top="180", pos_left="center",
-                range_color=["#ebedf0", "#9be9a8", "#40c463", "#30a14e", "#216e39"],
-            ),
-            legend_opts=opts.LegendOpts(is_show=False),
-        )
-        tl.add(cal, str(year))
 
-    return tl
+    cal.set_global_opts(
+        title_opts=opts.TitleOpts(title="提交活动日历热力图", pos_left="center"),
+        visualmap_opts=opts.VisualMapOpts(
+            max_=max_val, min_=0, orient="horizontal",
+            pos_bottom="0", pos_left="center",
+            range_color=["#ebedf0", "#9be9a8", "#40c463", "#30a14e", "#216e39"],
+        ),
+        legend_opts=opts.LegendOpts(is_show=False),
+    )
+    return cal
 
 
 # ---------------------------------------------------------------------------
@@ -643,7 +640,7 @@ def build_developer_24h_radar(df_author: pd.DataFrame, author_name: str) -> Rada
     return radar
 
 
-def build_developer_calendar(df_author: pd.DataFrame) -> Calendar | Timeline:
+def build_developer_calendar(df_author: pd.DataFrame) -> Calendar:
     """个人提交日历热力图。"""
     daily = df_author.groupby("date_6am_cutoff").size()
     return build_calendar_heatmap(daily)
