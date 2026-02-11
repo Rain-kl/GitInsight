@@ -195,14 +195,18 @@ def build_dashboard_html(
     dev_data_js = _build_developer_panels_js(prepared_df, author_stats)
 
     # Developer fragments JS map
-    dev_radar_js_map = json.dumps(
+    # CRITICAL: Escape </script> inside JSON strings to prevent breaking the outer <script> block
+    def _escape_script_tags(s: str) -> str:
+        return s.replace("</script>", "<\/script>")
+
+    dev_radar_js_map = _escape_script_tags(json.dumps(
         {k: v for k, v in dev_radar_fragments.items()},
         ensure_ascii=False,
-    )
-    dev_calendar_js_map = json.dumps(
+    ))
+    dev_calendar_js_map = _escape_script_tags(json.dumps(
         {k: v for k, v in dev_calendar_fragments.items()},
         ensure_ascii=False,
-    )
+    ))
 
     # ---- KPI ----
     kpi_html = _build_kpi_cards_html(metrics)
@@ -221,22 +225,22 @@ def build_dashboard_html(
 <script src="https://assets.pyecharts.org/assets/v5/echarts.min.js"></script>
 <style>
   :root {{
-    --bg-primary: #0f1724;
-    --bg-secondary: #1a2332;
-    --bg-card: #1e2a3a;
-    --bg-card-hover: #243447;
+    --bg-primary: #f8fafc;
+    --bg-secondary: #ffffff;
+    --bg-card: #ffffff;
+    --bg-card-hover: #f1f5f9;
     --accent: #3b82f6;
-    --accent-light: #60a5fa;
-    --text-primary: #e2e8f0;
-    --text-secondary: #94a3b8;
-    --text-muted: #64748b;
-    --border: #2d3f52;
+    --accent-light: #2563eb;
+    --text-primary: #1e293b;
+    --text-secondary: #64748b;
+    --text-muted: #94a3b8;
+    --border: #e2e8f0;
     --success: #22c55e;
     --warning: #f59e0b;
     --danger: #ef4444;
     --purple: #8b5cf6;
-    --gradient-blue: linear-gradient(135deg, #1e3a5f 0%, #0f1724 100%);
-    --shadow: 0 4px 24px rgba(0,0,0,0.3);
+    --gradient-blue: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   }}
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
   body {{

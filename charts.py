@@ -181,7 +181,7 @@ def build_personnel_trend_chart(monthly_trends: pd.DataFrame) -> Line:
     line.set_global_opts(
         title_opts=opts.TitleOpts(title="人员变动趋势", pos_left="center"),
         tooltip_opts=opts.TooltipOpts(trigger="axis"),
-        legend_opts=opts.LegendOpts(pos_top="8%"),
+        legend_opts=opts.LegendOpts(pos_bottom="0"),
         datazoom_opts=[opts.DataZoomOpts(range_start=0, range_end=100)],
         yaxis_opts=opts.AxisOpts(name="人数"),
     )
@@ -522,7 +522,7 @@ def build_code_activity_chart(code_activity: pd.DataFrame) -> Bar:
         title_opts=opts.TitleOpts(title="代码活动趋势", pos_left="center"),
         tooltip_opts=opts.TooltipOpts(trigger="axis", axis_pointer_type="cross"),
         datazoom_opts=[opts.DataZoomOpts(range_start=0, range_end=100)],
-        legend_opts=opts.LegendOpts(pos_top="8%"),
+        legend_opts=opts.LegendOpts(pos_bottom="0"),
         yaxis_opts=opts.AxisOpts(name="代码行数"),
     )
     return bar
@@ -600,7 +600,7 @@ def build_code_stability_chart(code_stability: pd.DataFrame) -> Bar:
         title_opts=opts.TitleOpts(title="代码稳定性分析", pos_left="center"),
         tooltip_opts=opts.TooltipOpts(trigger="axis"),
         datazoom_opts=[opts.DataZoomOpts(range_start=0, range_end=100)],
-        legend_opts=opts.LegendOpts(pos_top="8%"),
+        legend_opts=opts.LegendOpts(pos_bottom="0"),
         yaxis_opts=opts.AxisOpts(name="代码行数"),
     )
     return bar

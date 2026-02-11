@@ -309,6 +309,9 @@ def compute_file_heatmap(
     )
     file_counts["total_changes"] += file_stats_df.groupby("filepath")["deletions"].sum()
 
+    # Limit to top 100 files by modification count for performance
+    file_counts = file_counts.sort_values("mod_count", ascending=False).head(50)
+
     # 构建树结构
     root_children: dict[str, Any] = {}
 
