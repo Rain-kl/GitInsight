@@ -174,6 +174,58 @@ def compute_monthly_trends(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# Author half-year trends
+# ---------------------------------------------------------------------------
+
+def compute_author_halfyear_trends(df: pd.DataFrame) -> pd.DataFrame:
+    """按半年聚合每位开发者的提交数趋势。"""
+    if df.empty:
+        return pd.DataFrame()
+
+    df = df.copy()
+    dt = pd.to_datetime(df["date_6am_cutoff"])
+    half = ((dt.dt.month - 1) // 6) + 1
+    df["half_year_label"] = dt.dt.year.astype(str) + "-H" + half.astype(str)
+    df["half_year_start"] = pd.to_datetime(
+        dt.dt.year.astype(str) + "-" + half.map({1: "01", 2: "07"}) + "-01"
+    )
+
+    grouped = (
+        df.groupby(["half_year_start", "half_year_label", "author"]).size()
+        .rename("commits")
+        .reset_index()
+    )
+
+    pivot = grouped.pivot_table(
+        index=["half_year_start", "half_year_label"],
+        columns="author",
+        values="commits",
+        fill_value=0,
+    )
+
+    return pivot.sort_index(level=0)
+
+
+def compute_author_halfyear_ranges(df: pd.DataFrame) -> pd.DataFrame:
+    """计算每位开发者的首末半年区间。"""
+    if df.empty:
+        return pd.DataFrame()
+
+    df = df.copy()
+    dt = pd.to_datetime(df["date_6am_cutoff"])
+    half = ((dt.dt.month - 1) // 6) + 1
+    df["half_year_start"] = pd.to_datetime(
+        dt.dt.year.astype(str) + "-" + half.map({1: "01", 2: "07"}) + "-01"
+    )
+
+    ranges = df.groupby("author")["half_year_start"].agg(
+        first_half_start="min",
+        last_half_start="max",
+    )
+    return ranges
+
+
+# ---------------------------------------------------------------------------
 # Author stats
 # ---------------------------------------------------------------------------
 
@@ -430,13 +482,19 @@ def compute_insights(
 
     # 高级统计
     # 高级统计
-    with tqdm(total=6, desc="Computing metrics", unit="step") as pbar:
+    with tqdm(total=8, desc="Computing metrics", unit="step") as pbar:
         monthly_trends = compute_monthly_trends(df)
         pbar.update(1)
         
         author_stats = compute_author_stats(df, ref_date=now_time)
         pbar.update(1)
-        
+
+        author_halfyear_trends = compute_author_halfyear_trends(df)
+        pbar.update(1)
+
+        author_halfyear_ranges = compute_author_halfyear_ranges(df)
+        pbar.update(1)
+
         daily_commits = compute_daily_commits(df)
         pbar.update(1)
         
@@ -472,6 +530,8 @@ def compute_insights(
         # Data
         "monthly_trends": monthly_trends,
         "author_stats": author_stats,
+        "author_halfyear_trends": author_halfyear_trends,
+        "author_halfyear_ranges": author_halfyear_ranges,
         "daily_commits": daily_commits,
         "code_activity": code_activity,
         "code_stability": code_stability,

@@ -146,6 +146,8 @@ def build_dashboard_html(
     daily_commits = metrics.get("daily_commits", pd.Series(dtype=int))
     monthly_trends = metrics.get("monthly_trends", pd.DataFrame())
     author_stats = metrics.get("author_stats", pd.DataFrame())
+    author_halfyear_trends = metrics.get("author_halfyear_trends", pd.DataFrame())
+    author_halfyear_ranges = metrics.get("author_halfyear_ranges", pd.DataFrame())
     code_activity = metrics.get("code_activity", pd.DataFrame())
     code_stability = metrics.get("code_stability", pd.DataFrame())
     file_heatmap = metrics.get("file_heatmap", [])
@@ -158,7 +160,7 @@ def build_dashboard_html(
         ("calendar", build_calendar_heatmap, (daily_commits,)),
         ("trend", build_personnel_trend_chart, (monthly_trends,)),
         ("sunburst", build_activity_sunburst, (author_stats,)),
-        ("scatter", build_lifecycle_scatter, (author_stats,)),
+    ("scatter", build_lifecycle_scatter, (author_halfyear_trends, author_halfyear_ranges)),
         ("commit_rank", build_commit_rank_bar, (author_stats,)),
         ("night_rank", build_night_commit_rank, (author_stats,)),
         ("maint_rank", build_maintenance_rank, (author_stats,)),

@@ -204,66 +204,75 @@ def build_activity_sunburst(author_stats: pd.DataFrame) -> Sunburst:
 
 
 # ---------------------------------------------------------------------------
-# 4. Lifecycle Scatter
+# 4. Lifecycle Trend (Half-year)
 # ---------------------------------------------------------------------------
 
-def build_lifecycle_scatter(author_stats: pd.DataFrame) -> Scatter:
-    """开发者生命周期散点图。"""
-    if author_stats.empty:
-        return Scatter(init_opts=opts.InitOpts(width="100%", height="460px"))
+def build_lifecycle_scatter(
+    author_halfyear_trends: pd.DataFrame,
+    author_halfyear_ranges: pd.DataFrame,
+) -> Line:
+    """开发者生命周期趋势图（半年维度提交数）。"""
+    if author_halfyear_trends.empty:
+        return Line(init_opts=opts.InitOpts(width="100%", height="460px"))
 
-    scatter = Scatter(init_opts=opts.InitOpts(width="100%", height="460px"))
+    if isinstance(author_halfyear_trends.index, pd.MultiIndex):
+        labels = [idx[1] for idx in author_halfyear_trends.index]
+        half_year_starts = [idx[0] for idx in author_halfyear_trends.index]
+    else:
+        labels = [str(idx) for idx in author_halfyear_trends.index]
+        half_year_starts = [idx for idx in author_halfyear_trends.index]
 
-    for is_active in [True, False]:
-        subset = author_stats[author_stats["is_active"] == is_active]
-        if subset.empty:
+    line = Line(init_opts=opts.InitOpts(width="100%", height="500px"))
+    line.add_xaxis(labels)
+
+    for author in author_halfyear_trends.columns:
+        series = author_halfyear_trends[author].fillna(0)
+        start = None
+        end = None
+        if not author_halfyear_ranges.empty and author in author_halfyear_ranges.index:
+            start = author_halfyear_ranges.loc[author, "first_half_start"]
+            end = author_halfyear_ranges.loc[author, "last_half_start"]
+
+        values: list[int | None] = []
+        for dt, val in zip(half_year_starts, series):
+            if start is not None and dt < start:
+                values.append(None)
+                continue
+            if end is not None and dt > end:
+                values.append(None)
+                continue
+            values.append(int(val))
+
+        if all(v is None for v in values):
             continue
-
-        data = []
-        for author_name, row in subset.iterrows():
-            data.append([
-                row["first_commit"].strftime("%Y-%m-%d"),
-                row["last_commit"].strftime("%Y-%m-%d"),
-                int(row["total_commits"]),
-                str(author_name),
-            ])
-
-        color = "#2ecc71" if is_active else "#95a5a6"
-        name = "活跃" if is_active else "不活跃"
-
-        scatter.add_xaxis([d[0] for d in data])
-        scatter.add_yaxis(
-            name, data,
-            symbol_size=JsCode("function(d){return Math.max(6, Math.sqrt(d[2])*2);}"),
-            label_opts=opts.LabelOpts(
-                is_show=True, position="right",
-                formatter=JsCode("function(p){return p.value[3];}"),
-            ),
-            itemstyle_opts=opts.ItemStyleOpts(color=color),
+        if sum(v for v in values if v is not None) == 0:
+            continue
+        line.add_yaxis(
+            str(author),
+            values,
+            is_smooth=False,
+            is_symbol_show=False,
+            linestyle_opts=opts.LineStyleOpts(width=2),
         )
 
-    scatter.set_global_opts(
-        title_opts=opts.TitleOpts(title="开发者生命周期", pos_left="center"),
-        xaxis_opts=opts.AxisOpts(
-            type_="time", name="首次提交",
-            splitline_opts=opts.SplitLineOpts(is_show=True),
-        ),
-        yaxis_opts=opts.AxisOpts(
-            type_="time", name="最后提交",
-            splitline_opts=opts.SplitLineOpts(is_show=True),
-        ),
-        tooltip_opts=opts.TooltipOpts(
-            formatter=JsCode(
-                "function(p){"
-                "return '<b>'+p.value[3]+'</b><br/>"
-                "首次: '+p.value[0]+'<br/>"
-                "最后: '+p.value[1]+'<br/>"
-                "提交: '+p.value[2];}"
+    line.set_global_opts(
+        title_opts=opts.TitleOpts(title="开发者提交趋势 (半年)", pos_left="center"),
+        tooltip_opts=opts.TooltipOpts(trigger="axis"),
+        legend_opts=opts.LegendOpts(type_="scroll", pos_top="36", pos_left="center"),
+        datazoom_opts=[
+            opts.DataZoomOpts(
+                range_start=0,
+                range_end=100,
+                pos_bottom="14",
+                height=16,
+                is_show_detail=False,
+                is_show_data_shadow=False,
             )
-        ),
-        legend_opts=opts.LegendOpts(pos_bottom="0"),
+        ],
+        xaxis_opts=opts.AxisOpts(name="时间 (半年)", axislabel_opts=opts.LabelOpts(rotate=30)),
+        yaxis_opts=opts.AxisOpts(name="提交数"),
     )
-    return scatter
+    return line
 
 
 # ---------------------------------------------------------------------------
