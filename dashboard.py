@@ -178,18 +178,15 @@ def build_dashboard_html(
         except Exception as e:
             chart_fragments[chart_id] = f'<div class="chart-error">图表 {chart_id} 渲染失败: {e}</div>'
 
-    # Developer detail radar charts (pre-render top 20)
-    dev_radar_fragments: Dict[str, str] = {}
-    dev_calendar_fragments: Dict[str, str] = {}
+    # Developer detail table (pre-render top 20)
+    dev_table_fragments: Dict[str, str] = {}
     if not author_stats.empty and not prepared_df.empty:
         top_authors = list(author_stats.index[:20])
         for author_name in top_authors:
             try:
                 detail = build_developer_detail_charts(prepared_df, str(author_name), author_stats)
-                if detail and detail.get("radar"):
-                    dev_radar_fragments[str(author_name)] = _render_chart_div(detail["radar"], f"radar_{author_name}")
-                if detail and detail.get("calendar"):
-                    dev_calendar_fragments[str(author_name)] = _render_chart_div(detail["calendar"], f"cal_{author_name}")
+                if detail and detail.get("hour_table_html"):
+                    dev_table_fragments[str(author_name)] = detail["hour_table_html"]
             except Exception:
                 pass
 
@@ -201,12 +198,8 @@ def build_dashboard_html(
     def _escape_script_tags(s: str) -> str:
         return s.replace("</script>", "<\/script>")
 
-    dev_radar_js_map = _escape_script_tags(json.dumps(
-        {k: v for k, v in dev_radar_fragments.items()},
-        ensure_ascii=False,
-    ))
-    dev_calendar_js_map = _escape_script_tags(json.dumps(
-        {k: v for k, v in dev_calendar_fragments.items()},
+    dev_table_js_map = _escape_script_tags(json.dumps(
+        {k: v for k, v in dev_table_fragments.items()},
         ensure_ascii=False,
     ))
 
@@ -506,9 +499,10 @@ def build_dashboard_html(
     <h2 id="devModalTitle" style="font-size:22px;margin-bottom:4px;"></h2>
     <div id="devModalBadge"></div>
     <div class="dev-info-grid" id="devInfoGrid"></div>
-    <div class="dev-charts-grid">
-      <div class="dev-chart-box" id="devRadarBox"></div>
-      <div class="dev-chart-box" id="devCalendarBox"></div>
+    
+    <div style="margin-top:20px;">
+        <h3 style="font-size:16px; margin-bottom:12px; color:#334155;">24小时提交分布</h3>
+        <div class="dev-chart-box" id="devTableBox" style="min-height:auto; padding:16px;"></div>
     </div>
   </div>
 </div>
@@ -521,8 +515,7 @@ def build_dashboard_html(
 <script>
 // Developer data
 {dev_data_js}
-var devRadarFragments = {dev_radar_js_map};
-var devCalendarFragments = {dev_calendar_js_map};
+var devTableFragments = {dev_table_js_map};
 
 function showDevModal(name) {{
   var d = devData[name];
@@ -552,26 +545,9 @@ function showDevModal(name) {{
   }}
   document.getElementById('devInfoGrid').innerHTML = infoHtml;
 
-  // Radar chart
-  var radarBox = document.getElementById('devRadarBox');
-  radarBox.innerHTML = devRadarFragments[name] || '<p style="text-align:center;padding:60px;color:#64748b;">暂无雷达图数据</p>';
-  // Re-run scripts
-  var scripts = radarBox.querySelectorAll('script');
-  scripts.forEach(function(s) {{
-    var ns = document.createElement('script');
-    ns.text = s.text;
-    s.parentNode.replaceChild(ns, s);
-  }});
-
-  // Calendar chart
-  var calBox = document.getElementById('devCalendarBox');
-  calBox.innerHTML = devCalendarFragments[name] || '<p style="text-align:center;padding:60px;color:#64748b;">暂无日历数据</p>';
-  var scripts2 = calBox.querySelectorAll('script');
-  scripts2.forEach(function(s) {{
-    var ns = document.createElement('script');
-    ns.text = s.text;
-    s.parentNode.replaceChild(ns, s);
-  }});
+  // Table
+  var tableBox = document.getElementById('devTableBox');
+  tableBox.innerHTML = devTableFragments[name] || '<p style="text-align:center;padding:20px;color:#64748b;">暂无数据</p>';
 
   document.getElementById('devModal').classList.add('active');
 }}

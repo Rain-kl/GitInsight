@@ -587,38 +587,65 @@ def build_code_stability_chart(code_stability: pd.DataFrame) -> Bar:
 # 11. Developer Detail Panel (个人分析)
 # ---------------------------------------------------------------------------
 
-def build_developer_24h_radar(df_author: pd.DataFrame, author_name: str) -> Radar:
-    """24小时提交分布雷达图。"""
-    # 统计每个小时的提交数
+def build_developer_24h_html_table(df_author: pd.DataFrame) -> str:
+    """24小时提交分布表 (HTML)。"""
     hour_counts = [0] * 24
     for _, row in df_author.iterrows():
         h = int(row["hour"])
         hour_counts[h] += 1
 
-    max_val = max(hour_counts) if hour_counts else 1
+    # 构建 HTML 表格
+    html = """
+    <div style="width:100%; overflow-x:auto;">
+        <table style="width:100%; border-collapse: collapse; text-align: center; font-size: 13px;">
+            <thead>
+                <tr style="background-color: #f1f5f9; color: #64748b;">
+                    <th style="padding: 8px; border: 1px solid #e2e8f0;">时段</th>
+                    <th style="padding: 8px; border: 1px solid #e2e8f0;">提交数</th>
+                    <th style="padding: 8px; border: 1px solid #e2e8f0;">占比</th>
+                    <th style="padding: 8px; border: 1px solid #e2e8f0;">时段</th>
+                    <th style="padding: 8px; border: 1px solid #e2e8f0;">提交数</th>
+                    <th style="padding: 8px; border: 1px solid #e2e8f0;">占比</th>
+                </tr>
+            </thead>
+            <tbody>
+    """
+    
+    total = sum(hour_counts)
+    if total == 0:
+        total = 1  # avoid div by zero
 
-    radar = Radar(init_opts=opts.InitOpts(width="100%", height="350px"))
-    schema = [
-        opts.RadarIndicatorItem(name=f"{h}:00", max_=max_val)
-        for h in range(24)
-    ]
-    radar.add_schema(schema=schema)
-    radar.add(
-        author_name,
-        [hour_counts],
-        linestyle_opts=opts.LineStyleOpts(width=2, color="#5470c6"),
-        areastyle_opts=opts.AreaStyleOpts(opacity=0.3, color="#5470c6"),
-    )
-    radar.set_global_opts(
-        title_opts=opts.TitleOpts(title="24小时提交分布", pos_left="center"),
-    )
-    return radar
+    # 双栏显示: 左边 0-11, 右边 12-23
+    for i in range(12):
+        h1 = i
+        c1 = hour_counts[h1]
+        p1 = c1 / total * 100
 
+        h2 = i + 12
+        c2 = hour_counts[h2]
+        p2 = c2 / total * 100
+        
+        # 热度颜色背景 (简单的透明度)
+        bg1 = f"rgba(59, 130, 246, {min(c1/total*5, 0.5):.2f})" if c1 > 0 else "transparent"
+        bg2 = f"rgba(59, 130, 246, {min(c2/total*5, 0.5):.2f})" if c2 > 0 else "transparent"
 
-def build_developer_calendar(df_author: pd.DataFrame) -> Calendar:
-    """个人提交日历热力图。"""
-    daily = df_author.groupby("date_6am_cutoff").size()
-    return build_calendar_heatmap(daily)
+        html += f"""
+            <tr>
+                <td style="padding: 6px; border: 1px solid #e2e8f0;">{h1:02d}:00</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0; background-color: {bg1};">{c1}</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0; color: #94a3b8;">{p1:.1f}%</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0;">{h2:02d}:00</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0; background-color: {bg2};">{c2}</td>
+                <td style="padding: 6px; border: 1px solid #e2e8f0; color: #94a3b8;">{p2:.1f}%</td>
+            </tr>
+        """
+        
+    html += """
+            </tbody>
+        </table>
+    </div>
+    """
+    return html
 
 
 def build_developer_detail_charts(
@@ -629,7 +656,7 @@ def build_developer_detail_charts(
     """
     为指定开发者构建个人面板所需的所有数据和图表。
 
-    Returns dict with keys: info, radar_html, calendar_html
+    Returns dict with keys: info, hour_table_html
     """
     df_author = prepared_df[prepared_df["author"] == author_name].copy()
 
@@ -654,14 +681,11 @@ def build_developer_detail_charts(
             "night_ratio": round(float(stats_row["night_ratio"]) * 100, 1),
         }
 
-    # 24小时雷达图
-    radar = build_developer_24h_radar(df_author, author_name)
-
-    # 个人日历
-    calendar = build_developer_calendar(df_author)
+    # 24小时表格
+    hour_table_html = build_developer_24h_html_table(df_author)
 
     return {
         "info": info,
-        "radar": radar,
-        "calendar": calendar,
+        "hour_table_html": hour_table_html,
+        # "calendar" removed
     }
