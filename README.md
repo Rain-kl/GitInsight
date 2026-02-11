@@ -10,41 +10,19 @@ GitRepository Analysis and Visualization Tool / Git 仓库分析与可视化工�
 
 ---
 
-<!-- PROJECT LOGO -->
-<br />
-
-<p align="center">
-  <h3 align="center">GitInsight</h3>
-  <p align="center">
-    一款强大的 Git 仓库数据分析与可视化工具！
-    <br />
-    <a href="https://github.com/ryan/gitinsight"><strong>探索本项目的文档 »</strong></a>
-    <br />
-    <br />
-    <a href="https://github.com/ryan/gitinsight">查看Demo</a>
-    ·
-    <a href="https://github.com/ryan/gitinsight/issues">报告Bug</a>
-    ·
-    <a href="https://github.com/ryan/gitinsight/issues">提出新特性</a>
-  </p>
-
-</p>
-
-本篇README.md面向开发者
-
 ## 目录
 
 - [GitInsight](#gitinsight)
-	- [目录](#目录)
-		- [上手指南](#上手指南)
-					- [开发前的配置要求](#开发前的配置要求)
-					- [**安装步骤**](#安装步骤)
-		- [文件目录说明](#文件目录说明)
-		- [开发的架构](#开发的架构)
-		- [部署](#部署)
-		- [使用到的框架](#使用到的框架)
-		- [贡献者](#贡献者)
-			- [如何参与开源项目](#如何参与开源项目)
+  - [目录](#目录)
+    - [上手指南](#上手指南)
+          - [开发前的配置要求](#开发前的配置要求)
+          - [**安装步骤**](#安装步骤)
+    - [文件目录说明](#文件目录说明)
+    - [开发的架构](#开发的架构)
+    - [部署](#部署)
+    - [使用到的框架](#使用到的框架)
+    - [贡献者](#贡献者)
+      - [如何参与开源项目](#如何参与开源项目)
 
 ### 上手指南
 
