@@ -4,7 +4,7 @@ from pathlib import Path
 from analysis import compute_insights, filter_automated_commits, prepare_dataframe
 from charts import render_charts
 from git_reader import get_git_log, parse_git_log
-from report import export_csv, print_summary
+from report import print_summary
 
 
 def resolve_git_dir() -> str | None:
@@ -51,16 +51,14 @@ def main() -> None:
     metrics = compute_insights(df_prepared)
 
     repo_name = Path(git_dir).resolve().name or "git_repo"
-    output_csv = f"git_dev_insights_report_{repo_name}.csv"
     output_html = f"git_dev_insights_charts_{repo_name}.html"
 
-    export_csv(output_csv, metrics)
     render_charts(metrics, output_html)
 
     print_summary(
         metrics,
         filter_stats,
-        {"csv": output_csv, "html": output_html},
+        {"html": output_html},
     )
 
 if __name__ == "__main__":

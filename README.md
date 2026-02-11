@@ -14,7 +14,6 @@ python main.py
 输出说明
 
 - 终端输出：展示提交总量、统计日期范围、活跃/不活跃人数等摘要信息。
-- CSV 报告：`git_dev_insights_report_<repo_name>.csv`
 - 可视化图表（pyecharts HTML）：`git_dev_insights_charts_<repo_name>.html`
 	- 每日提交趋势折线图
 	- Top10 总提交量排行
