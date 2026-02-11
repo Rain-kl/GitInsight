@@ -546,12 +546,13 @@ def build_file_heatmap_sunburst(file_heatmap: list[dict]) -> Sunburst:
         radius=[0, "90%"],
         highlight_policy="ancestor",
         sort_="desc",
+        label_opts=opts.LabelOpts(is_show=False),
         levels=[
             {},
             {"r0": "0%", "r1": "20%", "itemStyle": {"borderWidth": 2}},
             {"r0": "20%", "r1": "45%", "itemStyle": {"borderWidth": 1}},
             {"r0": "45%", "r1": "70%", "itemStyle": {"borderWidth": 1}},
-            {"r0": "70%", "r1": "92%", "itemStyle": {"borderWidth": 1}, "label": {"fontSize": 9}},
+            {"r0": "70%", "r1": "92%", "itemStyle": {"borderWidth": 1}},
         ],
     )
     sunburst.set_global_opts(
