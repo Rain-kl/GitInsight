@@ -18,6 +18,7 @@ from datetime import timedelta
 from typing import Any, Dict, Optional
 
 import pandas as pd
+from tqdm import tqdm
 
 TARGET_TZ = "Asia/Shanghai"
 
@@ -90,13 +91,16 @@ def prepare_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
 
+    # Enable tqdm for pandas
+    tqdm.pandas(desc="Processing timestamps", leave=False)
+
     df["local_time"] = df["datetime_utc"].dt.tz_convert(TARGET_TZ).dt.tz_localize(None)
     df["hour"] = df["local_time"].dt.hour
     df["minute"] = df["local_time"].dt.minute
     df["second"] = df["local_time"].dt.second
     df["date"] = df["local_time"].dt.date
-    df["adjusted_time"] = df["local_time"].apply(get_adjusted_time_in_6am_day)
-    df["date_6am_cutoff"] = df["local_time"].apply(get_commit_date_with_6am_cutoff)
+    df["adjusted_time"] = df["local_time"].progress_apply(get_adjusted_time_in_6am_day)
+    df["date_6am_cutoff"] = df["local_time"].progress_apply(get_commit_date_with_6am_cutoff)
     df["time_in_6am_day"] = df["adjusted_time"]
 
     return df
@@ -425,16 +429,28 @@ def compute_insights(
         net_lines = total_insertions - total_deletions
 
     # 高级统计
-    monthly_trends = compute_monthly_trends(df)
-    author_stats = compute_author_stats(df, ref_date=now_time)
-    daily_commits = compute_daily_commits(df)
-    code_activity = compute_code_activity(df)
-    code_stability = compute_code_stability(df)
+    # 高级统计
+    with tqdm(total=6, desc="Computing metrics", unit="step") as pbar:
+        monthly_trends = compute_monthly_trends(df)
+        pbar.update(1)
+        
+        author_stats = compute_author_stats(df, ref_date=now_time)
+        pbar.update(1)
+        
+        daily_commits = compute_daily_commits(df)
+        pbar.update(1)
+        
+        code_activity = compute_code_activity(df)
+        pbar.update(1)
+        
+        code_stability = compute_code_stability(df)
+        pbar.update(1)
 
-    # 文件热度
-    file_heatmap: list[dict] = []
-    if file_stats_df is not None and not file_stats_df.empty:
-        file_heatmap = compute_file_heatmap(file_stats_df)
+        # 文件热度
+        file_heatmap: list[dict] = []
+        if file_stats_df is not None and not file_stats_df.empty:
+            file_heatmap = compute_file_heatmap(file_stats_df)
+        pbar.update(1)
 
     # 活跃人数
     active_authors_6m = 0

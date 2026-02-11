@@ -12,6 +12,9 @@ import re
 import subprocess
 from typing import Optional
 
+from loguru import logger
+from tqdm import tqdm
+
 import pandas as pd
 
 # 分隔符，用于区分每条提交
@@ -23,7 +26,7 @@ _GIT_LOG_FORMAT = f"{_COMMIT_SEP}%n%H%n%an%n%ae%n%ad%n%s"
 def get_git_log(git_dir: str) -> Optional[str]:
     """在指定 Git 目录中执行 git log 命令并返回输出文本。"""
     if not os.path.exists(git_dir):
-        print(f"❌ 错误：目录 '{git_dir}' 不存在。")
+        logger.error(f"❌ 错误：目录 '{git_dir}' 不存在。")
         return None
 
     try:
@@ -45,13 +48,13 @@ def get_git_log(git_dir: str) -> Optional[str]:
             errors="replace",
         )
     except FileNotFoundError:
-        print("❌ 错误：未找到 'git' 命令。请确保 Git 已安装并添加到 PATH。")
+        logger.error("❌ 错误：未找到 'git' 命令。请确保 Git 已安装并添加到 PATH。")
         return None
 
     if result.returncode != 0:
-        print(f"❌ Git 命令执行失败：{result.stderr}")
-        print(f"   仓库路径：{os.path.abspath(git_dir)}")
-        print("   请确认这是一个有效的 Git 仓库。")
+        logger.error(f"❌ Git 命令执行失败：{result.stderr}")
+        logger.error(f"   仓库路径：{os.path.abspath(git_dir)}")
+        logger.error("   请确认这是一个有效的 Git 仓库。")
         return None
 
     return result.stdout
@@ -75,7 +78,7 @@ def parse_git_log(stdout: str) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     blocks = stdout.split(_COMMIT_SEP)
 
-    for block in blocks:
+    for block in tqdm(blocks, desc="Parsing commits", unit="commit", leave=False):
         block = block.strip()
         if not block:
             continue
