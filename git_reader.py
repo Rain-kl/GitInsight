@@ -23,14 +23,34 @@ _COMMIT_SEP = "---COMMIT_BOUNDARY---"
 _GIT_LOG_FORMAT = f"{_COMMIT_SEP}%n%H%n%an%n%ae%n%ad%n%s"
 
 
+def _count_commits(git_dir: str) -> Optional[int]:
+    """快速获取仓库的总提交数（用于进度条）。"""
+    try:
+        result = subprocess.run(
+            ["git", "-C", git_dir, "rev-list", "--all", "--count"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if result.returncode == 0:
+            return int(result.stdout.strip())
+    except (FileNotFoundError, ValueError):
+        pass
+    return None
+
+
 def get_git_log(git_dir: str) -> Optional[str]:
-    """在指定 Git 目录中执行 git log 命令并返回输出文本。"""
+    """在指定 Git 目录中执行 git log 命令并返回输出文本，同时显示进度条。"""
     if not os.path.exists(git_dir):
         logger.error(f"❌ 错误：目录 '{git_dir}' 不存在。")
         return None
 
+    # 先获取总提交数，用于进度条
+    total_commits = _count_commits(git_dir)
+
     try:
-        result = subprocess.run(
+        proc = subprocess.Popen(
             [
                 "git",
                 "-C",
@@ -42,7 +62,8 @@ def get_git_log(git_dir: str) -> Optional[str]:
                 "--numstat",
                 "--no-color",
             ],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
             encoding="utf-8",
             errors="replace",
@@ -51,13 +72,24 @@ def get_git_log(git_dir: str) -> Optional[str]:
         logger.error("❌ 错误：未找到 'git' 命令。请确保 Git 已安装并添加到 PATH。")
         return None
 
-    if result.returncode != 0:
-        logger.error(f"❌ Git 命令执行失败：{result.stderr}")
+    # 逐行读取，遇到 COMMIT_SEP 时更新进度
+    lines: list[str] = []
+    with tqdm(total=total_commits, desc="正在读取 Git 日志", unit="commit", leave=False) as pbar:
+        for line in proc.stdout:                 # type: ignore[union-attr]
+            lines.append(line)
+            if _COMMIT_SEP in line:
+                pbar.update(1)
+
+    stderr_output = proc.stderr.read() if proc.stderr else ""  # type: ignore[union-attr]
+    proc.wait()
+
+    if proc.returncode != 0:
+        logger.error(f"❌ Git 命令执行失败：{stderr_output}")
         logger.error(f"   仓库路径：{os.path.abspath(git_dir)}")
         logger.error("   请确认这是一个有效的 Git 仓库。")
         return None
 
-    return result.stdout
+    return "".join(lines)
 
 
 # numstat 行的正则: <insertions>\t<deletions>\t<filepath>
@@ -78,7 +110,7 @@ def parse_git_log(stdout: str) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     blocks = stdout.split(_COMMIT_SEP)
 
-    for block in tqdm(blocks, desc="Parsing commits", unit="commit", leave=False):
+    for block in tqdm(blocks, desc="正在解析提交记录", unit="commit", leave=False):
         block = block.strip()
         if not block:
             continue
