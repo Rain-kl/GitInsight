@@ -1,4 +1,4 @@
-name: Auto Release Wheel
+name: Auto Release
 
 on:
   push:
@@ -9,10 +9,28 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
-    name: Build and Release Wheel
+  generate-version:
+    name: Generate Version
     runs-on: ubuntu-latest
-    
+    outputs:
+      version: ${{ steps.version.outputs.VERSION_NUM }}
+    steps:
+      - name: Generate Version Number
+        id: version
+        run: |
+          # Use current timestamp as version: YYYY.MM.DD.HHMMSS
+          # Using UTC time to avoid timezone confusion and ensure monotonicity
+          VERSION_NUM=$(date -u +'%Y.%m.%d.%H%M%S')
+          echo "VERSION_NUM=$VERSION_NUM" >> $GITHUB_OUTPUT
+          echo "Generated version: $VERSION_NUM"
+
+  build-wheel:
+    name: Build Wheel
+    needs: generate-version
+    runs-on: ubuntu-latest
+    env:
+      VERSION_NUM: ${{ needs.generate-version.outputs.version }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -22,15 +40,6 @@ jobs:
 
       - name: Set up Python
         run: uv python install
-
-      - name: Generate Version Number
-        id: version
-        run: |
-          # Use current timestamp as version: YYYY.MM.DD.HHMMSS
-          # Using UTC time to avoid timezone confusion and ensure monotonicity
-          VERSION_NUM=$(date -u +'%Y.%m.%d.%H%M%S')
-          echo "VERSION_NUM=$VERSION_NUM" >> $GITHUB_ENV
-          echo "Generated version: $VERSION_NUM"
 
       - name: Update pyproject.toml version
         run: |
@@ -43,28 +52,101 @@ jobs:
       - name: Build Wheel
         run: |
           uv build
-          
+
           # Verify the output
           echo "Build artifacts:"
           ls -l dist/
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel
+          path: dist/*.whl
+
+  build-windows-binary:
+    name: Build Windows Binary
+    needs: generate-version
+    runs-on: windows-latest
+    env:
+      VERSION_NUM: ${{ needs.generate-version.outputs.version }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Install PyInstaller
+        run: uv pip install pyinstaller
+
+      - name: Build Windows Executable
+        run: |
+          # Use --collect-all to bundle the entire gitinsight package
+          uv run pyinstaller --onefile --name gitinsight --collect-all gitinsight gitinsight/__main__.py
+
+          # Verify the output
+          echo "Build artifacts:"
+          dir dist\
+
+      - name: Upload Windows binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-binary
+          path: dist/gitinsight.exe
+
+  create-release:
+    name: Create Release
+    needs: [generate-version, build-wheel, build-windows-binary]
+    runs-on: ubuntu-latest
+    env:
+      VERSION_NUM: ${{ needs.generate-version.outputs.version }}
+
+    steps:
+      - name: Download wheel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wheel
+          path: dist/
+
+      - name: Download Windows binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-binary
+          path: dist/
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "v${{ env.VERSION_NUM }}"
           name: "Release v${{ env.VERSION_NUM }}"
-          files: dist/*.whl
+          files: |
+            dist/*.whl
+            dist/gitinsight.exe
           make_latest: true
           body: |
             Auto-generated release from GitHub Actions.
             Version: ${{ env.VERSION_NUM }}
-            Build Time: $(date)
-            
+
+            ## Downloads
+
+            | File | Description |
+            |------|-------------|
+            | `*.whl` | Pure Python Wheel — install with `pip install <wheel-filename>.whl` (requires Python 3.12+) |
+            | `gitinsight.exe` | Windows standalone executable — no Python required |
+
             ## Platform Support
-            This release contains a **Pure Python Wheel** (`*-py3-none-any.whl`).
-            It is compatible with:
+
+            **Python Wheel** (`*-py3-none-any.whl`) is compatible with:
             - ✅ **Windows (x64/ARM64)**
             - ✅ **Linux (x64/ARM64)**
             - ✅ **macOS (x64/ARM64)**
-            
-            Requires Python 3.12+.
+
+            **Windows Binary** (`gitinsight.exe`):
+            - ✅ **Windows (x64)** — no Python installation required
