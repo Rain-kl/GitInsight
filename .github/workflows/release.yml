@@ -1,4 +1,4 @@
-name: Auto Release Wheel
+name: Auto Release
 
 on:
   push:
@@ -9,10 +9,23 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
-    name: Build and Release Wheel
+  generate-version:
+    name: Generate Version Number
     runs-on: ubuntu-latest
-    
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Generate Version Number
+        id: version
+        run: |
+          VERSION_NUM=$(date -u +'%Y.%m.%d.%H%M%S')
+          echo "version=$VERSION_NUM" >> $GITHUB_OUTPUT
+          echo "Generated version: $VERSION_NUM"
+
+  build-wheel:
+    name: Build Wheel
+    runs-on: ubuntu-latest
+    needs: generate-version
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -23,48 +36,101 @@ jobs:
       - name: Set up Python
         run: uv python install
 
-      - name: Generate Version Number
-        id: version
-        run: |
-          # Use current timestamp as version: YYYY.MM.DD.HHMMSS
-          # Using UTC time to avoid timezone confusion and ensure monotonicity
-          VERSION_NUM=$(date -u +'%Y.%m.%d.%H%M%S')
-          echo "VERSION_NUM=$VERSION_NUM" >> $GITHUB_ENV
-          echo "Generated version: $VERSION_NUM"
-
       - name: Update pyproject.toml version
         run: |
-          # Simple sed replacement for the version field
-          # Matches 'version = "..."'
-          sed -i "s/version = \".*\"/version = \"${{ env.VERSION_NUM }}\"/" pyproject.toml
+          sed -i "s/version = \".*\"/version = \"${{ needs.generate-version.outputs.version }}\"/" pyproject.toml
           echo "Updated pyproject.toml version:"
           grep "version =" pyproject.toml
 
       - name: Build Wheel
         run: |
           uv build
-          
-          # Verify the output
           echo "Build artifacts:"
           ls -l dist/
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel
+          path: dist/*.whl
+
+  build-windows-binary:
+    name: Build Windows Binary
+    runs-on: windows-latest
+    needs: generate-version
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies and PyInstaller
+        run: uv sync --extra dev
+
+      - name: Build Windows executable
+        run: |
+          uv run pyinstaller gitinsight.spec
+          echo "Build artifacts:"
+          dir dist\
+
+      - name: Upload Windows binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-binary
+          path: dist/gitinsight.exe
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [generate-version, build-wheel, build-windows-binary]
+    steps:
+      - name: Download wheel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wheel
+          path: dist/
+
+      - name: Download Windows binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-binary
+          path: dist/
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "v${{ env.VERSION_NUM }}"
-          name: "Release v${{ env.VERSION_NUM }}"
-          files: dist/*.whl
+          tag_name: "v${{ needs.generate-version.outputs.version }}"
+          name: "Release v${{ needs.generate-version.outputs.version }}"
+          files: |
+            dist/*.whl
+            dist/gitinsight.exe
           make_latest: true
           body: |
             Auto-generated release from GitHub Actions.
-            Version: ${{ env.VERSION_NUM }}
-            Build Time: $(date)
-            
+            Version: ${{ needs.generate-version.outputs.version }}
+
+            ## Downloads
+
+            | File | Description |
+            |------|-------------|
+            | `*.whl` | Pure Python Wheel — requires Python 3.12+ |
+            | `gitinsight.exe` | Windows standalone executable (no Python required) |
+
             ## Platform Support
-            This release contains a **Pure Python Wheel** (`*-py3-none-any.whl`).
-            It is compatible with:
+
+            ### Python Wheel (`*-py3-none-any.whl`)
             - ✅ **Windows (x64/ARM64)**
             - ✅ **Linux (x64/ARM64)**
             - ✅ **macOS (x64/ARM64)**
-            
-            Requires Python 3.12+.
+
+            Requires Python 3.12+. Install with: `pip install gitinsight-*.whl`
+
+            ### Windows Executable (`gitinsight.exe`)
+            - ✅ **Windows (x64)**
+
+            No Python installation required. Download and run directly.
+            Usage: `gitinsight.exe <git_repo_path>`
